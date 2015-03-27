@@ -66,7 +66,8 @@ func handleRequest(conn net.Conn, rhost string) {
 	defer wsConn.Close()
 
 	REQUEST_HEADERS := map[string][]string{
-		"Sec-Websocket-Protocol": []string{"binary", "base64"},
+		"Sec-WebSocket-Protocol": []string{"binary", "base64"},
+		"Sec-WebSocket-Version":  []string{"13"},
 	}
 	ws, response, err := websocket.NewClient(wsConn, ws_url, REQUEST_HEADERS, BUFFER_SIZE, BUFFER_SIZE)
 	if err != nil {

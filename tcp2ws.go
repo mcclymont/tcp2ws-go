@@ -1,13 +1,11 @@
-package main
+package tcp2ws
 
 import (
 	"encoding/base64"
-	"flag"
 	"fmt"
 	"github.com/gorilla/websocket"
 	"net"
 	"net/url"
-	"os"
 )
 
 const (
@@ -15,53 +13,47 @@ const (
 	BUFFER_SIZE = 1024
 )
 
-func main() {
-	rhost := flag.String("rhost", "REQUIRED", "URL of upstream websocket server. Format is 'ws://HOST:PORT/PATH'")
-	lhost := flag.String("lhost", "localhost:3333", "TCP HOST:PORT to listen on")
-
-	flag.Parse()
-	if *rhost == "REQUIRED" {
-		fmt.Println("Usage:")
-		flag.PrintDefaults()
-		os.Exit(1)
-	}
+// If forever is true, it will run in an infinite loop accepting new
+// connections and proxying them to rhost.
+// If it is false, it will stop listening on listenHost after
+// the first connection is established.
+func Proxy(forever bool, listenHost string, remoteHost string) error {
 	// Listen for incoming connections.
-	l, err := net.Listen(CONN_TYPE, *lhost)
+	l, err := net.Listen(CONN_TYPE, listenHost)
 	if err != nil {
-		fmt.Println("Error listening:", err.Error())
-		os.Exit(1)
+		return fmt.Errorf("Error listening:", err.Error())
 	}
 	// Close the listener when the application closes.
 	defer l.Close()
-	fmt.Println("Listening on " + *lhost)
+	fmt.Println("Listening on " + listenHost)
 	for {
 		// Listen for an incoming connection.
 		conn, err := l.Accept()
 		if err != nil {
-			fmt.Println("Error accepting: ", err.Error())
-			os.Exit(1)
+			return fmt.Errorf("Error accepting: ", err.Error())
 		}
-		// Handle connections in a new goroutine.
-		go handleRequest(conn, *rhost)
+		if forever {
+			go handleRequest(conn, remoteHost)
+		} else {
+			return handleRequest(conn, remoteHost)
+		}
 	}
 }
 
 // Handles incoming requests.
-func handleRequest(conn net.Conn, rhost string) {
+func handleRequest(conn net.Conn, rhost string) error {
 	fmt.Println("TCP connection received")
 	defer func() { fmt.Println("Connection closed") }()
 	defer conn.Close()
 
 	ws_url, err := url.Parse(rhost)
 	if err != nil {
-		fmt.Println(err.Error())
-		return
+		return err
 	}
 
 	wsConn, err := net.Dial(CONN_TYPE, ws_url.Host)
 	if err != nil {
-		fmt.Println(err.Error())
-		return
+		return err
 	}
 	defer wsConn.Close()
 
@@ -71,8 +63,7 @@ func handleRequest(conn net.Conn, rhost string) {
 	}
 	ws, response, err := websocket.NewClient(wsConn, ws_url, REQUEST_HEADERS, BUFFER_SIZE, BUFFER_SIZE)
 	if err != nil {
-		fmt.Println(err.Error())
-		return
+		return err
 	}
 	defer ws.Close()
 
@@ -88,15 +79,14 @@ func handleRequest(conn net.Conn, rhost string) {
 	} else if protocol == "binary" {
 		messageType = websocket.BinaryMessage
 	} else {
-		fmt.Println("Expected Sec-Websocket-Protocol header value of binary or base64, got:")
-		fmt.Println(response.Header)
-		return
+		return fmt.Errorf("Expected Sec-Websocket-Protocol header value of binary or base64, got:\n%s", response.Header)
 	}
 
 	fmt.Println("Websocket connection established, proxying...")
 	var stopChan = make(chan int)
 	go pipe_to_ws(conn, ws, messageType, stopChan)
 	pipe_to_net(conn, ws, messageType, stopChan)
+	return nil
 }
 
 func pipe_to_net(netConn net.Conn, wsConn *websocket.Conn, protocolType int, stopChan chan int) {

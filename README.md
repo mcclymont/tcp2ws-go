@@ -12,7 +12,7 @@ TODO: Install instructions
 
 ## Usage
 ```
-go run tcp2ws.go --lhost= localhost:3333 --rhost ws://1.2.3.4:80/websock
+go run cmd/tcp2ws/main.go --lhost= localhost:3333 --rhost ws://1.2.3.4:80/websock
 ```
 #### Options:
   * -lhost="localhost:3333": TCP HOST:PORT to listen on

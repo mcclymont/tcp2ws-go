@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/gorilla/websocket"
 	"net"
-	"net/url"
+	"net/http"
 )
 
 const (
@@ -46,22 +46,13 @@ func handleRequest(conn net.Conn, rhost string) error {
 	defer func() { fmt.Println("Connection closed") }()
 	defer conn.Close()
 
-	ws_url, err := url.Parse(rhost)
-	if err != nil {
-		return err
-	}
-
-	wsConn, err := net.Dial(CONN_TYPE, ws_url.Host)
-	if err != nil {
-		return err
-	}
-	defer wsConn.Close()
-
 	REQUEST_HEADERS := map[string][]string{
 		"Sec-WebSocket-Protocol": []string{"binary", "base64"},
 		"Sec-WebSocket-Version":  []string{"13"},
 	}
-	ws, response, err := websocket.NewClient(wsConn, ws_url, REQUEST_HEADERS, BUFFER_SIZE, BUFFER_SIZE)
+
+	dialer := websocket.Dialer{Proxy: http.ProxyFromEnvironment}
+	ws, response, err := dialer.Dial(rhost, REQUEST_HEADERS)
 	if err != nil {
 		return err
 	}
